@@ -87,12 +87,15 @@ class TestWellfoundScraper(unittest.TestCase):
         call_kwargs = mock_app.extract.call_args.kwargs
         urls = call_kwargs.get("urls", [])
         self.assertEqual(len(urls), 3)
-        # Page 1 should not have ?page=
-        self.assertIn("role/l/python", urls[0])
+        # Page 1 should use /role/ without ?page=
+        self.assertIn("role/python", urls[0])
+        self.assertNotIn("/l/", urls[0])
         self.assertNotIn("?page=", urls[0])
         # Page 2 should have ?page=2
+        self.assertIn("role/python", urls[1])
         self.assertIn("?page=2", urls[1])
         # Page 3 should have ?page=3
+        self.assertIn("role/python", urls[2])
         self.assertIn("?page=3", urls[2])
 
     @patch.dict(os.environ, {"FIRECRAWL_API_KEY": "test_key"})

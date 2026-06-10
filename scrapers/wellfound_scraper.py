@@ -114,13 +114,14 @@ def fetch_jobs(job_title: str, max_pages: int = MAX_PAGES) -> List[Job]:
     formatted_title = urllib.parse.quote(job_title.replace(" ", "-").lower())
 
     # Build URLs for multiple pages
-    # Wellfound uses ?page=N query parameter for pagination
+    # Wellfound uses /role/{title} for role-based job listings
+    # Pagination is handled by Firecrawl's extract across multiple URLs
     urls = []
     for page in range(1, max_pages + 1):
         if page == 1:
-            url = f"https://wellfound.com/role/l/{formatted_title}"
+            url = f"https://wellfound.com/role/{formatted_title}"
         else:
-            url = f"https://wellfound.com/role/l/{formatted_title}?page={page}"
+            url = f"https://wellfound.com/role/{formatted_title}?page={page}"
         urls.append(url)
 
     logger.info(f"Wellfound: requesting {len(urls)} page(s)...")
