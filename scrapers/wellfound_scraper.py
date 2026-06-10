@@ -44,14 +44,16 @@ def fetch_jobs(job_title: str) -> List[Job]:
     url = f"https://wellfound.com/role/l/{formatted_title}"
     
     try:
-        response = app.scrape_url(url, params={
-            'formats': ['extract'],
-            'extract': {
-                'schema': WellfoundExtractSchema.model_json_schema()
-            }
-        })
+        response = app.extract(urls=[url], schema=WellfoundExtractSchema.model_json_schema())
         
-        extract_data = response.get('extract', {})
+        # Firecrawl's extract() method typically returns a dict with 'data' containing the extracted JSON
+        # However, it could be 'extract', 'data', or direct output depending on the exact SDK wrapper version
+        if hasattr(response, 'data'):
+            extract_data = response.data
+        elif isinstance(response, dict):
+            extract_data = response.get('data', response)
+        else:
+            extract_data = {}
         if not extract_data:
              logger.warning("No data extracted by Firecrawl for Wellfound.")
              return jobs

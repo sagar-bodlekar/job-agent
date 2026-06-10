@@ -12,9 +12,9 @@ class TestWellfoundScraper(unittest.TestCase):
         mock_app = MagicMock()
         MockFirecrawlApp.return_value = mock_app
         
-        # Mocking the response from Firecrawl
-        mock_app.scrape_url.return_value = {
-            "extract": {
+        # Mocking the response from Firecrawl extract
+        mock_app.extract.return_value = {
+            "data": {
                 "jobs": [
                     {
                         "title": "Python Developer",
@@ -53,7 +53,7 @@ class TestWellfoundScraper(unittest.TestCase):
         mock_app = MagicMock()
         MockFirecrawlApp.return_value = mock_app
         
-        mock_app.scrape_url.return_value = {
+        mock_app.extract.return_value = {
             "extract": {
                 "jobs": []
             }
@@ -68,7 +68,7 @@ class TestWellfoundScraper(unittest.TestCase):
         mock_app = MagicMock()
         MockFirecrawlApp.return_value = mock_app
         
-        mock_app.scrape_url.side_effect = Exception("Timeout or invalid key")
+        mock_app.extract.side_effect = Exception("Timeout or invalid key")
         
         jobs = fetch_jobs("Python")
         self.assertEqual(len(jobs), 0)
