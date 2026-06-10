@@ -46,3 +46,36 @@
 - Verify that `jobs.csv` is generated correctly and contains data from all successful sources.
 - Add error logging to the orchestrator to handle cases where a specific scraper fails without crashing the whole application.
 - Add brief inline documentation and type hints where necessary.
+
+## Phase 7: Production Hardening — Retry, Pagination & Rate Limiting
+**Goal**: Make the system resilient and complete enough to fetch real-world job data reliably.
+
+### Retry Mechanism
+- Add a utility module (`scrapers/retry.py`) with:
+  - Configurable retry count (default: 3)
+  - Exponential backoff with jitter
+  - Retry-on specific exceptions (Timeout, HTTP 429, HTTP 5xx)
+  - Logging at each retry attempt
+- Wrap all scraper network calls with the retry helper.
+- Tests: verify retry count, backoff delay behavior, and exhaustion fallback.
+
+### Pagination
+- Update `fetch_jobs` signature to accept optional `max_pages` parameter (default: 5).
+- **RemoteOK**: Loop through pages using `?page=N` until empty or max pages reached.
+- **Naukri**: Scrape consecutive pages using URL-based page patterns.
+- **Wellfound**: Use Firecrawl's crawl/extract capabilities for multi-page fetching.
+- Tests: mock multi-page responses and verify aggregation.
+
+### Rate Limiting / Throttling
+- Add a utility module (`scrapers/throttle.py`) with:
+  - Per-domain request delay tracking
+  - Global configurable delay between scrapers
+- Integrate into each scraper's fetch loop and the orchestrator's scraper sequence.
+- Tests: verify delay timing and request sequencing.
+
+### Deliverables
+- Retry utility module with tests
+- Pagination support in all three scrapers with tests
+- Rate limiting utility module with tests
+- Updated orchestrator to coordinate throttled scraper execution
+- Updated documentation reflecting the new capabilities

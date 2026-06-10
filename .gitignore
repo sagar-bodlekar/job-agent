@@ -1,0 +1,23 @@
+# Environment files
+# .env contains secrets (API keys) and must never be committed.
+# .env.example is the template and SHOULD be tracked.
+.env
+
+# Generated output
+jobs.csv
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
