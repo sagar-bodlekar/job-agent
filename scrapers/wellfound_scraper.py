@@ -48,6 +48,7 @@ def _extract_page(app: FirecrawlApp, urls: list) -> List[Job]:
             kwargs={"urls": urls, "schema": WellfoundExtractSchema.model_json_schema()},
             max_retries=3,
             base_delay=2.0,  # Firecrawl is slower, start with a longer delay
+            retryable_exceptions=(TimeoutError, ConnectionError, IOError),
         )
     except Exception as e:
         logger.error(f"Wellfound/Firecrawl failed: {e}")

@@ -1,121 +1,138 @@
 import unittest
 from unittest.mock import patch, MagicMock
-import requests
+import os
 
 from scrapers.naukri_scraper import fetch_jobs
-
-# The scraper calls retry_request -> requests.request (imported in scrapers.retry)
-MOCK_PATH = "scrapers.retry.requests.request"
 
 
 class TestNaukriScraper(unittest.TestCase):
 
-    def setUp(self):
-        self.mock_html_success = """
-        <html><body>
-            <div class="srp-jobtuple-wrapper">
-                <a class="title" href="https://naukri.com/job/1">Python Developer</a>
-                <a class="comp-name">Tech Corp India</a>
-                <span class="locWdth">Bangalore</span>
-                <span class="sal-wrap" title="10-15 Lacs PA">10-15 Lacs PA</span>
-            </div>
-            <div class="jobTuple">
-                <a class="title" href="https://naukri.com/job/2">Data Scientist</a>
-                <!-- Missing company and salary to test partial data -->
-                <span class="locWdth">Remote</span>
-            </div>
-        </body></html>
-        """
-        self.mock_html_bot_block = "<html><head><title>Access Denied</title></head><body>Pardon Our Interruption</body></html>"
-        self.mock_html_changed_structure = "<html><body><div class='unknown-wrapper'><ul><li>Python Job</li></ul></div></body></html>"
-        self.mock_html_with_pagination = """
-        <html><body>
-            <div class="jobTuple">
-                <a class="title" href="https://naukri.com/job/1">Python Developer</a>
-                <a class="comp-name">Tech Corp India</a>
-                <span class="locWdth">Bangalore</span>
-            </div>
-            <a class="next-page" href="/python-developer-jobs-2">Next</a>
-        </body></html>
-        """
+    @patch.dict(os.environ, {"FIRECRAWL_API_KEY": "test_key"})
+    @patch("scrapers.naukri_scraper.FirecrawlApp")
+    def test_fetch_jobs_success(self, MockFirecrawlApp):
+        """Successful extraction returns the correct jobs."""
+        mock_app = MagicMock()
+        MockFirecrawlApp.return_value = mock_app
 
-    def _make_response(self, html: str, status_code: int = 200):
-        mock_response = MagicMock()
-        mock_response.status_code = status_code
-        mock_response.text = html
-        return mock_response
+        mock_app.extract.return_value = {
+            "data": {
+                "jobs": [
+                    {
+                        "title": "Python Developer",
+                        "company": "Tech Corp India",
+                        "location": "Bangalore",
+                        "salary": "10-15 Lacs PA",
+                        "link": "https://naukri.com/job/1",
+                    },
+                    {
+                        "title": "Data Scientist",
+                        "company": "Another Corp",
+                        "location": "Remote",
+                        "salary": None,
+                        "link": "https://naukri.com/job/2",
+                    },
+                ]
+            }
+        }
 
-    def test_fetch_jobs_success_and_partial_data(self):
-        with patch(MOCK_PATH) as mock_request:
-            # Only one page with results, no next page link
-            mock_request.return_value = self._make_response(self.mock_html_success)
+        jobs = fetch_jobs("Python")
 
-            jobs = fetch_jobs("Python", max_pages=5)
+        self.assertEqual(len(jobs), 2)
+        self.assertEqual(jobs[0].title, "Python Developer")
+        self.assertEqual(jobs[0].company, "Tech Corp India")
+        self.assertEqual(jobs[0].location, "Bangalore")
+        self.assertEqual(jobs[0].salary, "10-15 Lacs PA")
+        self.assertEqual(jobs[0].link, "https://naukri.com/job/1")
+        self.assertEqual(jobs[0].source_platform, "Naukri")
 
-            self.assertEqual(len(jobs), 2)
+        self.assertEqual(jobs[1].title, "Data Scientist")
+        self.assertEqual(jobs[1].company, "Another Corp")
+        self.assertIsNone(jobs[1].salary)
+        self.assertEqual(jobs[1].location, "Remote")
 
-            self.assertEqual(jobs[0].title, "Python Developer")
-            self.assertEqual(jobs[0].company, "Tech Corp India")
-            self.assertEqual(jobs[0].location, "Bangalore")
-            self.assertEqual(jobs[0].salary, "10-15 Lacs PA")
-            self.assertEqual(jobs[0].link, "https://naukri.com/job/1")
+    @patch.dict(os.environ, clear=True)
+    def test_missing_api_key(self):
+        """Without API key, scraper returns empty list."""
+        jobs = fetch_jobs("Python")
+        self.assertEqual(len(jobs), 0)
 
-            self.assertEqual(jobs[1].title, "Data Scientist")
-            self.assertEqual(jobs[1].company, "Unknown Company")
-            self.assertIsNone(jobs[1].salary)
-            self.assertEqual(jobs[1].location, "Remote")
+    @patch.dict(os.environ, {"FIRECRAWL_API_KEY": "test_key"})
+    @patch("scrapers.naukri_scraper.FirecrawlApp")
+    def test_empty_output(self, MockFirecrawlApp):
+        """Firecrawl returns empty data."""
+        mock_app = MagicMock()
+        MockFirecrawlApp.return_value = mock_app
 
-    def test_bot_protection_block(self):
-        with patch(MOCK_PATH) as mock_request:
-            mock_request.return_value = self._make_response(self.mock_html_bot_block)
+        mock_app.extract.return_value = {
+            "data": {
+                "jobs": []
+            }
+        }
 
-            jobs = fetch_jobs("Python", max_pages=5)
-            self.assertEqual(len(jobs), 0)
+        jobs = fetch_jobs("Python")
+        self.assertEqual(len(jobs), 0)
 
-    def test_html_structure_changed(self):
-        with patch(MOCK_PATH) as mock_request:
-            mock_request.return_value = self._make_response(self.mock_html_changed_structure)
+    @patch.dict(os.environ, {"FIRECRAWL_API_KEY": "test_key"})
+    @patch("scrapers.naukri_scraper.FirecrawlApp")
+    def test_firecrawl_exception(self, MockFirecrawlApp):
+        """Firecrawl exception is caught gracefully."""
+        mock_app = MagicMock()
+        MockFirecrawlApp.return_value = mock_app
 
-            jobs = fetch_jobs("Python", max_pages=5)
-            self.assertEqual(len(jobs), 0)
+        mock_app.extract.side_effect = Exception("Timeout or invalid key")
 
-    def test_timeout(self):
-        with patch(MOCK_PATH) as mock_request:
-            mock_request.side_effect = requests.exceptions.Timeout("Connection timed out")
+        jobs = fetch_jobs("Python")
+        self.assertEqual(len(jobs), 0)
 
-            jobs = fetch_jobs("Python", max_pages=5)
-            self.assertEqual(len(jobs), 0)
+    @patch.dict(os.environ, {"FIRECRAWL_API_KEY": "test_key"})
+    @patch("scrapers.naukri_scraper.FirecrawlApp")
+    def test_pagination_sends_multiple_urls(self, MockFirecrawlApp):
+        """Verify that max_pages > 1 sends multiple URLs to Firecrawl."""
+        mock_app = MagicMock()
+        MockFirecrawlApp.return_value = mock_app
+        mock_app.extract.return_value = {"data": {"jobs": []}}
 
-    def test_pagination_multiple_pages(self):
-        """Verify that pagination stops when there's no next-page link."""
-        with patch(MOCK_PATH) as mock_request:
-            page_1 = self._make_response(self.mock_html_with_pagination)
-            page_2 = self._make_response(self.mock_html_success)  # page 2 has jobs but no next link
+        fetch_jobs("Python", max_pages=3)
 
-            mock_request.side_effect = [page_1, page_2]
+        call_kwargs = mock_app.extract.call_args.kwargs
+        urls = call_kwargs.get("urls", [])
+        self.assertEqual(len(urls), 3)
+        # Page 1 should use the base URL
+        self.assertIn("/python-jobs", urls[0])
+        self.assertNotIn("?", urls[0])
+        # Page 2+ should have page suffix
+        self.assertIn("python-jobs-2", urls[1])
+        self.assertIn("python-jobs-3", urls[2])
 
-            jobs = fetch_jobs("Python", max_pages=5)
-            # Page 1 has 1 job, page 2 has 2 jobs
-            self.assertEqual(len(jobs), 3)
+    @patch.dict(os.environ, {"FIRECRAWL_API_KEY": "test_key"})
+    @patch("scrapers.naukri_scraper.FirecrawlApp")
+    def test_respects_max_pages(self, MockFirecrawlApp):
+        """max_pages parameter controls number of URLs sent."""
+        mock_app = MagicMock()
+        MockFirecrawlApp.return_value = mock_app
+        mock_app.extract.return_value = {"data": {"jobs": []}}
 
-    def test_pagination_respects_max_pages(self):
-        """Should not exceed the max_pages limit."""
-        with patch(MOCK_PATH) as mock_request:
-            # Return 2 pages of results but only allow max_pages=1
-            mock_request.return_value = self._make_response(self.mock_html_success)
+        fetch_jobs("Python", max_pages=1)
+        call_kwargs = mock_app.extract.call_args.kwargs
+        self.assertEqual(len(call_kwargs.get("urls", [])), 1)
 
-            jobs = fetch_jobs("Python", max_pages=1)
-            # Only the first page should be fetched
-            self.assertEqual(len(jobs), 2)
-            self.assertEqual(mock_request.call_count, 1)
+        fetch_jobs("Python", max_pages=10)
+        call_kwargs = mock_app.extract.call_args.kwargs
+        self.assertEqual(len(call_kwargs.get("urls", [])), 10)
 
-    def test_first_page_failure_returns_empty(self):
-        """If the first page fails, return empty list."""
-        with patch(MOCK_PATH) as mock_request:
-            mock_request.side_effect = requests.exceptions.ConnectionError("DNS failure")
+    @patch.dict(os.environ, {"FIRECRAWL_API_KEY": "test_key"})
+    @patch("scrapers.naukri_scraper.FirecrawlApp")
+    def test_missing_data_key_in_response(self, MockFirecrawlApp):
+        """Response without 'data' key should return empty."""
+        mock_app = MagicMock()
+        MockFirecrawlApp.return_value = mock_app
 
-            jobs = fetch_jobs("Python", max_pages=5)
-            self.assertEqual(len(jobs), 0)
+        mock_app.extract.return_value = {
+            "extract": {"jobs": []}  # 'extract' not 'data'
+        }
+
+        jobs = fetch_jobs("Python")
+        self.assertEqual(len(jobs), 0)
 
 
 if __name__ == '__main__':
